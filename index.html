@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>極致標準貪食蛇 - Production Grade Snake</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-danger: #f43f5e;
+      --accent-success: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --grid-bg: #020617;
+      --cell-size: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .container {
+      background: var(--card-bg);
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0.75rem;
+    }
+
+    .title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    .stats-bar {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      text-align: center;
+    }
+
+    .stat-box {
+      background: #0f172a;
+      padding: 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      border: 2px solid #334155;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      background: var(--grid-bg);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      text-align: center;
+      transition: opacity 0.2s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .overlay-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+    }
+
+    .overlay-title.danger { color: var(--accent-danger); }
+    .overlay-title.success { color: var(--accent-success); }
+    .overlay-title.info { color: var(--accent); }
+
+    .overlay-desc {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      max-width: 280px;
+      line-height: 1.4;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 0.6rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .controls-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .key-badge {
+      display: inline-block;
+      background: #334155;
+      color: #e2e8f0;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.75rem;
+    }
+
+    /* 虛擬按鍵（觸控支援） */
+    .mobile-controls {
+      display: none;
+      grid-template-columns: repeat(3, 45px);
+      grid-template-rows: repeat(2, 45px);
+      gap: 6px;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .mobile-controls {
+        display: grid;
+      }
+    }
+
+    .pad-btn {
+      background: #334155;
+      border: none;
+      color: var(--text);
+      font-size: 1.2rem;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .pad-btn:active { background: var(--accent); color: #000; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title">SNAKE.CORE</div>
+      <div id="statusTag" style="font-size: 0.8rem; color: var(--text-muted);">STANDBY</div>
+    </header>
+
+    <section class="stats-bar">
+      <div class="stat-box">
+        <div class="stat-label">當前分數</div>
+        <div class="stat-value" id="currentScore">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">生存時間</div>
+        <div class="stat-value" id="timeElapsed">00:00</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">歷史最高</div>
+        <div class="stat-value" id="highScore">0</div>
+      </div>
+    </section>
+
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas" width="400" height="400"></canvas>
+      
+      <div id="overlay" class="overlay">
+        <div id="overlayTitle" class="overlay-title info">準備就緒</div>
+        <div id="overlayDesc" class="overlay-desc">使用鍵盤方向鍵或 WASD 操控。撞擊邊界或自身將立即終止。</div>
+        <button id="primaryBtn" class="btn">開始遊戲</button>
+      </div>
+    </div>
+
+    <div class="controls-hint">
+      操作：<span class="key-badge">W/A/S/D</span> 或 <span class="key-badge">↑/←/↓/→</span> 轉向 | <span class="key-badge">Space</span> 暫停
+    </div>
+
+    <div class="mobile-controls">
+      <div></div>
+      <button class="pad-btn" data-dir="UP">▲</button>
+      <div></div>
+      <button class="pad-btn" data-dir="LEFT">◀</button>
+      <button class="pad-btn" data-dir="DOWN">▼</button>
+      <button class="pad-btn" data-dir="RIGHT">▶</button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Storage 安全邊界層：嚴格封裝，全面防禦 Quota 與 Syntax 崩潰
+     */
+    class StorageService {
+      static STORAGE_KEY = 'SNAKE_ENGINE_RECORD_V1';
+
+      static getRecord() {
+        try {
+          const raw = localStorage.getItem(this.STORAGE_KEY);
+          if (!raw) return { highScore: 0, bestTimeSec: 0 };
+          const parsed = JSON.parse(raw);
+          return {
+            highScore: typeof parsed.highScore === 'number' ? parsed.highScore : 0,
+            bestTimeSec: typeof parsed.bestTimeSec === 'number' ? parsed.bestTimeSec : 0
+          };
+        } catch (e) {
+          console.warn('[Storage] 本地存儲失效或受限，切換回降級狀態', e);
+          return { highScore: 0, bestTimeSec: 0 };
+        }
+      }
+
+      static saveRecord(score, timeSec) {
+        try {
+          const current = this.getRecord();
+          const updated = {
+            highScore: Math.max(current.highScore, score),
+            bestTimeSec: Math.max(current.bestTimeSec, timeSec),
+            timestamp: Date.now()
+          };
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        } catch (e) {
+          console.warn('[Storage] 寫入紀錄失敗:', e);
+          return null;
+        }
+      }
+    }
+
+    /**
+     * 遊戲狀態機列舉
+     */
+    const GameState = {
+      IDLE: 'IDLE',
+      RUNNING: 'RUNNING',
+      PAUSED: 'PAUSED',
+      GAME_OVER: 'GAME_OVER',
+      VICTORY: 'VICTORY'
+    };
+
+    /**
+     * 方向向量定義與逆向映射（防止 180° 自撞）
+     */
+    const Direction = {
+      UP: { x: 0, y: -1, opp: 'DOWN' },
+      DOWN: { x: 0, y: 1, opp: 'UP' },
+      LEFT: { x: -1, y: 0, opp: 'RIGHT' },
+      RIGHT: { x: 1, y: 0, opp: 'LEFT' }
+    };
+
+    class SnakeGameEngine {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+
+        // 幾何網格常數
+        this.gridCount = 20; // 20x20
+        this.cellSize = canvas.width / this.gridCount;
+
+        // 核心迴圈計時
+        this.tickInterval = 100; // 每個邏輯 tick 100ms
+        this.lastTime = 0;
+        this.accumulatedTime = 0;
+
+        // 狀態管理
+        this.state = GameState.IDLE;
+        this.inputQueue = []; // 輸入緩衝佇列
+        this.currentDirection = Direction.RIGHT;
+
+        // 數據模型
+        this.snake = [];
+        this.food = null;
+        this.score = 0;
+        this.startTime = 0;
+        this.elapsedSeconds = 0;
+        this.record = StorageService.getRecord();
+
+        // 綁定 UI 元素
+        this.dom = {
+          currentScore: document.getElementById('currentScore'),
+          timeElapsed: document.getElementById('timeElapsed'),
+          highScore: document.getElementById('highScore'),
+          statusTag: document.getElementById('statusTag'),
+          overlay: document.getElementById('overlay'),
+          overlayTitle: document.getElementById('overlayTitle'),
+          overlayDesc: document.getElementById('overlayDesc'),
+          primaryBtn: document.getElementById('primaryBtn')
+        };
+
+        this.init();
+      }
+
+      init() {
+        this.bindEvents();
+        this.dom.highScore.textContent = this.record.highScore;
+        this.renderInitialState();
+        requestAnimationFrame(this.gameLoop.bind(this));
+      }
+
+      bindEvents() {
+        window.addEventListener('keydown', (e) => {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            this.togglePause();
+            return;
+          }
+
+          const keyMap = {
+            KeyW: 'UP', ArrowUp: 'UP',
+            KeyS: 'DOWN', ArrowDown: 'DOWN',
+            KeyA: 'LEFT', ArrowLeft: 'LEFT',
+            KeyD: 'RIGHT', ArrowRight: 'RIGHT'
+          };
+
+          const targetDir = keyMap[e.code];
+          if (targetDir) {
+            e.preventDefault();
+            this.enqueueDirection(targetDir);
+          }
+        });
+
+        // 虛擬鍵盤支援
+        document.querySelectorAll('.pad-btn').forEach(btn => {
+          btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this.enqueueDirection(btn.dataset.dir);
+          });
+        });
+
+        this.dom.primaryBtn.addEventListener('click', () => {
+          this.startOrRestart();
+        });
+      }
+
+      /**
+       * 防暴斃輸入緩衝機制 (Input Queue)
+       * 最多保留 2 個指令，杜絕同一個 tick 內多次按鍵引發的反向撞擊
+       */
+      enqueueDirection(dirKey) {
+        if (this.state !== GameState.RUNNING) return;
+        const requestedDir = Direction[dirKey];
+        if (!requestedDir) return;
+
+        const lastQueued = this.inputQueue.length > 0 
+          ? this.inputQueue[this.inputQueue.length - 1] 
+          : this.currentDirection;
+
+        // 禁止反向指令
+        if (requestedDir.opp === this.getDirectionName(lastQueued)) {
+          return;
+        }
+
+        if (this.inputQueue.length < 2) {
+          this.inputQueue.push(requestedDir);
+        }
+      }
+
+      getDirectionName(dirObj) {
+        for (const [key, val] of Object.entries(Direction)) {
+          if (val.x === dirObj.x && val.y === dirObj.y) return key;
+        }
+        return '';
+      }
+
+      startOrRestart() {
+        // 重設狀態
+        this.snake = [
+          { x: 5, y: 10 },
+          { x: 4, y: 10 },
+          { x: 3, y: 10 }
+        ];
+        this.currentDirection = Direction.RIGHT;
+        this.inputQueue = [];
+        this.score = 0;
+        this.elapsedSeconds = 0;
+        this.startTime = performance.now();
+        this.accumulatedTime = 0;
+        this.spawnFood();
+
+        this.state = GameState.RUNNING;
+        this.dom.overlay.classList.add('hidden');
+        this.dom.statusTag.textContent = 'RUNNING';
+        this.dom.statusTag.style.color = 'var(--accent-success)';
+        this.updateStatsDisplay();
+      }
+
+      togglePause() {
+        if (this.state === GameState.RUNNING) {
+          this.state = GameState.PAUSED;
+          this.showOverlay('暫停中', '按下空白鍵或按鈕繼續', '繼續遊戲', 'info');
+          this.dom.statusTag.textContent = 'PAUSED';
+          this.dom.statusTag.style.color = 'var(--accent)';
+        } else if (this.state === GameState.PAUSED) {
+          this.state = GameState.RUNNING;
+          this.dom.overlay.classList.add('hidden');
+          this.dom.statusTag.textContent = 'RUNNING';
+          this.dom.statusTag.style.color = 'var(--accent-success)';
+        }
+      }
+
+      /**
+       * 確定性無碰撞食物生成 (Deterministic Food Spawning)
+       * 拒絕 while 抽樣迴圈，直接提取所有空餘網格並隨機選取一格
+       */
+      spawnFood() {
+        const occupied = new Set(this.snake.map(segment => `${segment.x},${segment.y}`));
+        const freeCells = [];
+
+        for (let x = 0; x < this.gridCount; x++) {
+          for (let y = 0; y < this.gridCount; y++) {
+            if (!occupied.has(`${x},${y}`)) {
+              freeCells.push({ x, y });
+            }
+          }
+        }
+
+        // 地圖已全滿，觸發通關
+        if (freeCells.length === 0) {
+          this.triggerVictory();
+          return;
+        }
+
+        const randomIndex = Math.floor(Math.random() * freeCells.length);
+        this.food = freeCells[randomIndex];
+      }
+
+      /**
+       * 固定時間步長 (Fixed Timestep) 驅動遊戲邏輯
+       */
+      gameLoop(currentTime) {
+        if (!this.lastTime) this.lastTime = currentTime;
+        const deltaTime = currentTime - this.lastTime;
+        this.lastTime = currentTime;
+
+        if (this.state === GameState.RUNNING) {
+          this.accumulatedTime += deltaTime;
+          this.elapsedSeconds = Math.floor((currentTime - this.startTime) / 1000);
+          this.updateStatsDisplay();
+
+          while (this.accumulatedTime >= this.tickInterval) {
+            this.tick();
+            this.accumulatedTime -= this.tickInterval;
+          }
+        }
+
+        this.render();
+        requestAnimationFrame(this.gameLoop.bind(this));
+      }
+
+      /**
+       * 核心邏輯一步 (Single Discrete Tick)
+       */
+      tick() {
+        // 從緩衝佇列取出下一個方向
+        if (this.inputQueue.length > 0) {
+          this.currentDirection = this.inputQueue.shift();
+        }
+
+        const head = this.snake[0];
+        const newHead = {
+          x: head.x + this.currentDirection.x,
+          y: head.y + this.currentDirection.y
+        };
+
+        // 邊界撞擊檢測
+        if (
+          newHead.x < 0 ||
+          newHead.x >= this.gridCount ||
+          newHead.y < 0 ||
+          newHead.y >= this.gridCount
+        ) {
+          this.triggerGameOver('撞上牆壁！遊戲結束');
+          return;
+        }
+
+        // 自身撞擊檢測（忽略尾巴，因為尾巴下一步會移開）
+        const willGrow = newHead.x === this.food.x && newHead.y === this.food.y;
+        const checkBody = willGrow ? this.snake : this.snake.slice(0, -1);
+        const hasCollision = checkBody.some(seg => seg.x === newHead.x && seg.y === newHead.y);
+
+        if (hasCollision) {
+          this.triggerGameOver('咬到自己了！遊戲結束');
+          return;
+        }
+
+        // 蛇前進
+        this.snake.unshift(newHead);
+
+        if (willGrow) {
+          this.score += 10;
+          this.spawnFood();
+        } else {
+          this.snake.pop();
+        }
+
+        this.updateStatsDisplay();
+      }
+
+      triggerGameOver(reason) {
+        this.state = GameState.GAME_OVER;
+        const updated = StorageService.saveRecord(this.score, this.elapsedSeconds);
+        if (updated) this.dom.highScore.textContent = updated.highScore;
+
+        this.dom.statusTag.textContent = 'GAME OVER';
+        this.dom.statusTag.style.color = 'var(--accent-danger)';
+        this.showOverlay(
+          '挑戰失敗',
+          `${reason}。最終得分：${this.score} 分，生存時間：${this.formatTime(this.elapsedSeconds)}。`,
+          '重新開始',
+          'danger'
+        );
+      }
+
+      triggerVictory() {
+        this.state = GameState.VICTORY;
+        const updated = StorageService.saveRecord(this.score, this.elapsedSeconds);
+        if (updated) this.dom.highScore.textContent = updated.highScore;
+
+        this.dom.statusTag.textContent = 'VICTORY';
+        this.dom.statusTag.style.color = 'var(--accent-success)';
+        this.showOverlay(
+          '全盤通關！',
+          `不可思議！你填滿了整個網格！最終得分：${this.score}。`,
+          '再次挑戰',
+          'success'
+        );
+      }
+
+      showOverlay(title, desc, btnText, variant) {
+        this.dom.overlayTitle.className = `overlay-title ${variant}`;
+        this.dom.overlayTitle.textContent = title;
+        this.dom.overlayDesc.textContent = desc;
+        this.dom.primaryBtn.textContent = btnText;
+        this.dom.overlay.classList.remove('hidden');
+      }
+
+      formatTime(seconds) {
+        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      updateStatsDisplay() {
+        this.dom.currentScore.textContent = this.score;
+        this.dom.timeElapsed.textContent = this.formatTime(this.elapsedSeconds);
+      }
+
+      renderInitialState() {
+        this.ctx.fillStyle = '#020617';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+
+      render() {
+        // 清除畫布
+        this.ctx.fillStyle = '#020617';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // 繪製格線（增強工程美感）
+        this.ctx.strokeStyle = '#0f172a';
+        this.ctx.lineWidth = 1;
+        for (let i = 0; i <= this.gridCount; i++) {
+          const p = i * this.cellSize;
+          this.ctx.beginPath();
+          this.ctx.moveTo(p, 0);
+          this.ctx.lineTo(p, this.canvas.height);
+          this.ctx.stroke();
+
+          this.ctx.beginPath();
+          this.ctx.moveTo(0, p);
+          this.ctx.lineTo(this.canvas.width, p);
+          this.ctx.stroke();
+        }
+
+        // 繪製食物
+        if (this.food) {
+          const pad = 3;
+          this.ctx.fillStyle = '#f43f5e';
+          this.ctx.shadowColor = '#f43f5e';
+          this.ctx.shadowBlur = 8;
+          this.ctx.fillRect(
+            this.food.x * this.cellSize + pad,
+            this.food.y * this.cellSize + pad,
+            this.cellSize - pad * 2,
+            this.cellSize - pad * 2
+          );
+          this.ctx.shadowBlur = 0; // 重設光暈
+        }
+
+        // 繪製蛇身
+        this.snake.forEach((seg, idx) => {
+          const pad = 1.5;
+          // 頭部用亮青色，身體遞減漸層
+          this.ctx.fillStyle = idx === 0 ? '#38bdf8' : '#0284c7';
+          this.ctx.fillRect(
+            seg.x * this.cellSize + pad,
+            seg.y * this.cellSize + pad,
+            this.cellSize - pad * 2,
+            this.cellSize - pad * 2
+          );
+        });
+      }
+    }
+
+    // 引擎啟動
+    window.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('gameCanvas');
+      new SnakeGameEngine(canvas);
+    });
+  </script>
+</body>
+</html>
